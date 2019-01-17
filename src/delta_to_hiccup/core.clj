@@ -206,32 +206,46 @@
 (defn delta-is-newline-only? [{:keys [insert]}]
   (= #{\newline} (set insert)))
 
-(defn break-up-delta [{:keys [insert attributes]}]
-  (let [parts (->> insert
-                   (partition-by #{\newline})
-                   (map #(apply str %)))]
-    (mapv
-     (fn [part] {:insert part
-                 :attributes attributes})
-     parts)))
+(defn break-up-multiline-delta [{:keys [insert attributes]}]
+  (->> insert
+       (partition-by #{\newline})
+       (map #(apply str %))
+       (mapv
+        (fn [part] {:insert part
+                    :attributes attributes}))))
 
-(defn create-op-group [deltas]
-  (loop [deltas deltas acc []]
-    (let [[d & tail] deltas]
-     (if (delta-is-newline-only? d)
-       [{:inserts (conj acc (dissoc d :attributes))
-         :attributes (:attributes d)}
-        tail]
-       (recur tail (conj acc d))))))
+(defn line-grouper [[acc op-group] delta]
+  (if (delta-is-newline-only? delta)
+    [(conj acc (assoc op-group
+                      :attributes (:attributes delta)
+                      :newlines (count (:insert delta))))
+     {:inserts []}]
+    [acc (update op-group :inserts (fnil conj []) delta)]))
+
+(defn block-grouper [[acc {:keys [current-ident
+                                  current-block-type
+                                  current-children] :as state}]
+                     {:keys [inserts attributes] :as delta}]
+  (let [{:keys [indent
+                list
+                code-block
+                blockquote
+                header
+                direction
+                align
+                ]} attributes]
+    (case current-block-type
+      ("ordered" "bullet")
+
+      ("blockquote" "code-block" "header")
+      )))
 
 (defn normalize-ops [deltas]
-  (loop [deltas deltas acc []]
-    (if (empty? deltas) acc
-     (let [[d1 & tail] deltas]
-       (if (delta-has-internal-linebreak? d1)
-         (recur (into (break-up-delta d1) tail) acc)
-         (let [[opg tail] (create-op-group deltas)]
-           (recur tail (conj acc opg))
-           ))))))
+  (->> deltas
+       (mapcat break-up-multiline-delta)
+       (reduce line-grouper [[] nil])
+       first))
 
-(clojure.pprint/pprint (normalize-ops list-test))
+(comment
+  (normalize-ops list-test)
+  )
