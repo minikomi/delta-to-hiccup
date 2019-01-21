@@ -231,8 +231,8 @@
     [(conj acc (assoc op-group
                       :attributes (:attributes delta)
                       :newlines (count (:insert delta))))
-     {:insert []}]
-    [acc (update op-group :insert (fnil conj []) delta)]))
+     {:inserts []}]
+    [acc (update op-group :inserts (fnil conj []) delta)]))
 
 (defn bold [insert]
   [:strong insert])
@@ -418,7 +418,6 @@
    {:name "Bullet list"
     :pred (fn [{:keys [attributes] :as op}]
             (= "bullet" (:list attributes)))
-    :nested true
     :type :nested-block
     :outer (fn bullet-list-outer-fn [attributes children]
              [:ul children])
@@ -451,13 +450,86 @@
 (def block-elements (atom default-block-elements))
 
 (defn determine-block-element [{:keys [inserts attributes] :as op}]
-  (some #(when ((:pred %) op) %) @block-elements))
+  (some #(when ((:pred %) op) (assoc %
+                                     :inserts inserts
+                                     :attributes attributes))
+        @block-elements))
 
+(defn format-block [{:keys [outer children] :as op}]
+  (select-keys op [:children :insert]))
 
+(defn add-op-to-current [op stack]
+  (if stack
+    (let [current (peek stack)]
+     (conj (pop stack)
+           (update current :children (fnil conj [])
+                   (select-keys op [:inserts :attributes]))))
+    ))
 
 (comment
   (def n (first (normalize-ops list-test)))
-  (map :name (map determine-block-element n))
+  (first n)
   (first (group-block-elements n))
+  (loop [ops n
+         stack []
+         acc []]
+    (println "--------------STACK-----")
+    (clojure.pprint/pprint stack)
+    (println "----------->> OP")
+    (if (empty? ops) (do
+                       (println "FINAL::::::::::::")
+                       (clojure.pprint/pprint
+                        (conj acc
 
+                              stack)
+                        ))
+        (let [op (determine-block-element (first ops))
+              indent (or (get-in op [:attributes :indent]))]
+          (clojure.pprint/pprint op)
+          (if (= (:name op) (:name (first stack)))
+            (if (= :nested-block (:type op))
+              (let [depth (get-in op [:attributes :indent] 0)
+                    current-depth (count stack)]
+                (cond
+                  ;; deeper
+                  (< current-depth (inc depth))
+                  (do (println "deeper")
+                   (recur ops
+                          (conj stack op)
+                          []))
+                  ;; shallower
+                  (> current-depth (inc depth))
+                  (do
+                    (println "shallower")
+                    (recur ops
+                          (let [st (pop (pop stack))
+                                o1 (peek stack)
+                                o2 (peek (pop stack))]
+                            (conj st
+                                  (update o2 :children conj o1)))
+                          acc))
+                  ;; same depth
+                  :else
+                  (do
+                    (println "same depth")
+                    (recur (rest ops)
+                          (add-op-to-current op stack)
+                          acc))))
+              (do
+                (println "continuing block element")
+                (recur (rest ops)
+                       (add-op-to-current op stack)
+                       acc)))
+            (do
+              (println "new block element")
+              (recur (rest ops)
+                    [(-> op
+                         (assoc :children
+                             [(select-keys op [:inserts :attributes])])
+                         (dissoc :inserts :attributes))]
+                    (if (not-empty stack)
+                      (conj acc (reduce #(update % :children (fnil conj []) %2) stack))
+                      acc
+                      )))
+            ))))
   )

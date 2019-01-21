@@ -1,0 +1,31 @@
+#+TITLE: scratch
+
+
+* if nested block
+** if deeper?
+- push onto stack
+- new children acc
+- loop
+** when shallower nested
+- peek stack, see if nested also
+*** not nested
+- collapse stack, formatting
+  - children
+    - push current element onto children
+  - child level attributes (text dir)
+    - textdir
+    - alignment
+  - inline elements
+    - bold
+    - etc
+*** Nested
+- pop stack once and collapse
+- continue adding to top stack children
+** When non-nested
+  - collapse stack
+  - start new stack
+* looping
+** stack
+*** has element data from block element
+*** working on single element
+*** has children acc
