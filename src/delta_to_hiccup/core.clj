@@ -255,6 +255,7 @@
            block-type
            block-meta] :as state}
    {{:keys [list indent] :or {indent 0}} :attributes}]
+  (println block-type)
   (and
    list
    (= (get list-tags list) block-type)
@@ -272,8 +273,7 @@
            (and
             (= list list-block-type)
             (< list-level indent))
-           (or (not (#{:ul :ol} block-type))
-               (not= block-type list-block-type))))))
+           (not= block-type list-block-type)))))
 
 (defn shallower-list?
   [{:keys [acc
@@ -350,7 +350,6 @@
 (defn group-block-elements
   ([deltas] (group-block-elements deltas default-state))
   ([deltas {:keys [acc list-level block-type block-meta] :as state}]
-   (prn state)
    (if (empty? deltas)
      [acc []]
      (let [[d & eltas] deltas
@@ -358,6 +357,7 @@
            {:keys [list
                    blockquote
                    code-block]} attributes]
+       (prn d)
        (cond
          ;; Continue tag
          ;; --------------------------------------
@@ -384,7 +384,10 @@
                                    0)
                      :acc []
                      :block-type (get list-tags list)
-                     :block-meta nil}))])
+                     :block-meta nil}))]
+           (recur remaining-deltas
+                  (update state
+                          :acc conj [block-type contents])))
          ;; Default
          ;; ---------------------------------------
          :else
@@ -403,8 +406,58 @@
            ;; regular insert
            (recur eltas (update state :acc conj [:p insert]))))))))
 
+
+(def default-block-elements
+  [{:name "Ordered List"
+    :pred (fn [{:keys [attributes] :as op}]
+            (= "ordered" (:list attributes)))
+    :type :nested-block
+    :outer (fn ordered-list-outer-fn [attributes children]
+             [:ol children])
+    :inner-tag :li}
+   {:name "Bullet list"
+    :pred (fn [{:keys [attributes] :as op}]
+            (= "bullet" (:list attributes)))
+    :nested true
+    :type :nested-block
+    :outer (fn bullet-list-outer-fn [attributes children]
+             [:ul children])
+    :inner-tag :li}
+   {:name "Block Quote"
+    :pred (fn [{:keys [attributes] :as op}]
+            (:blockquote attributes))
+    :type :block
+    :outer (fn block-quote-outer-fn [attributes children]
+             [:ul children])}
+   {:name "Code Block"
+    :pred (fn [{:keys [attributes] :as op}]
+            (:code-block attributes))
+    :type :block
+    :outer (fn code-block-outer-fn [attributes children]
+             [:pre children])}
+   {:name "Header"
+    :pred (fn [{:keys [attributes] :as op}]
+            (#{1 2 3 4 5 6 7} (:header attributes)))
+    :type :block
+    :outer (fn header-outer-fn [attributes children]
+             (let [header-tag (keyword (str "h" (:header attributes)))]
+               [header-tag children]))}
+   {:name "Default Paragrapgh"
+    :pred (fn [children] true)
+    :type :block
+    :outer (fn [attributes children]
+             [:p children])}])
+
+(def block-elements (atom default-block-elements))
+
+(defn determine-block-element [{:keys [inserts attributes] :as op}]
+  (some #(when ((:pred %) op) %) @block-elements))
+
+
+
 (comment
   (def n (first (normalize-ops list-test)))
+  (map :name (map determine-block-element n))
   (first (group-block-elements n))
 
   )
