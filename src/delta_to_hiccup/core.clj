@@ -5,6 +5,18 @@
   ( clojure.walk/keywordize-keys
    [
     {
+     "attributes" {
+                   "bold" true
+                   },
+     "insert" "ttt uuu vvv"
+     },
+    {
+     "attributes" {
+                   "align" "right"
+                   },
+     "insert" "\n"
+     }
+    {
      "insert" "a"
      },
     {
@@ -256,87 +268,118 @@
 
 (def block-elements (atom default-block-elements))
 
-(defn determine-block-element [{:keys [inserts attributes] :as op}]
-  (some #(when ((:pred %) op) (assoc %
-                                     :inserts inserts
-                                     :attributes attributes))
+(defn determine-block-element [{:keys [inserts attributes newlines] :as op}]
+  (some #(when ((:pred %) op)
+           (assoc %
+                  :inserts inserts
+                  :newlines newlines
+                  :attributes attributes))
         @block-elements))
 
-(defn format-block [{:keys [outer children] :as op}]
-  (select-keys op [:children :insert]))
+(defn normalize-ops [deltas]
+  (->> deltas
+       (mapcat break-up-multiline-delta)
+       (reduce line-grouper [[] nil])
+       first
+       (mapv determine-block-element)))
+
+(defn render-inline [op]
+
+ ["INLINE" (:inserts op)])
+
+(defn render-block [op]
+  ((:outer op) (:attributes op)
+   (mapv #(vector (or (:inner-tag op) :span) (:insert %))
+         (:children op))))
 
 (defn add-op-to-current [op stack]
-  (if stack
-    (let [current (peek stack)]
-     (conj (pop stack)
-           (update current :children (fnil conj [])
-                   (select-keys op [:inserts :attributes]))))
-    ))
+  (let [current (peek stack)]
+    (conj (pop stack)
+          (update current
+                  :children
+                  (fnil conj [])
+                  (render-inline op)))))
+
+(defn collapse [stack]
+  (println "collapse" (prn-str stack))
+  (let [rev (reverse stack)]
+    (reduce #(conj % (render-block %2))
+            (render-block (first rev))
+            (rest rev))))
+
+(defn unwind-stack [acc stack]
+  (println "unwind" stack)
+  (when (not-empty stack) (println (collapse stack)))
+  (if (not-empty stack)
+    (conj acc (collapse stack))
+    acc))
+
+(defn new-stack [op]
+  (-> op
+      (assoc :children
+             [(render-inline op)])
+      (dissoc :inserts :attributes :newlines)
+      vector))
 
 (comment
-  (def n (first (normalize-ops list-test)))
-  (first n)
-  (first (group-block-elements n))
-  (loop [ops n
-         stack []
-         acc []]
-    (println "--------------STACK-----")
-    (clojure.pprint/pprint stack)
-    (println "----------->> OP")
-    (if (empty? ops) (do
-                       (println "FINAL::::::::::::")
-                       (clojure.pprint/pprint
-                        (conj acc
+(collapse [(first (normalize-ops list-test))])
+  (let [n (normalize-ops list-test)]
+    (doall (loop [ops n
+            stack []
+            acc []]
+       (if (empty? ops) (unwind-stack acc stack)
+           (let [op (first ops)]
+             ( println "-----------------OP--------------")
+             (println stack)
+             (cond
 
-                              stack)
-                        ))
-        (let [op (determine-block-element (first ops))
-              indent (or (get-in op [:attributes :indent]))]
-          (clojure.pprint/pprint op)
-          (if (= (:name op) (:name (first stack)))
-            (if (= :nested-block (:type op))
-              (let [depth (get-in op [:attributes :indent] 0)
-                    current-depth (count stack)]
-                (cond
-                  ;; deeper
-                  (< current-depth (inc depth))
-                  (do (println "deeper")
+               (and (not-empty stack)
+                    (= :nested-block (:type (peek stack)))
+                    (= :nested-block (:type op)))
+               (let [depth (inc (get-in op [:attributes :indent] 0))
+                     current-depth (count stack)]
+                 (cond
+                   ;; deeper
+                   (< current-depth depth)
                    (recur ops
                           (conj stack op)
-                          []))
-                  ;; shallower
-                  (> current-depth (inc depth))
-                  (do
-                    (println "shallower")
-                    (recur ops
+                          [])
+                   ;; shallower
+                   (> current-depth depth)
+                   (recur ops
                           (let [st (pop (pop stack))
                                 o1 (peek stack)
                                 o2 (peek (pop stack))]
                             (conj st
                                   (update o2 :children conj o1)))
-                          acc))
-                  ;; same depth
-                  :else
-                  (do
-                    (println "same depth")
-                    (recur (rest ops)
-                          (add-op-to-current op stack)
-                          acc))))
-              (do
-                (println "continuing block element")
-                (recur (rest ops)
-                       (add-op-to-current op stack)
-                       acc)))
-            (do
-              (println "new block element")
-              (recur (rest ops)
-                    [(-> op
-                         (assoc :children
-                             [(select-keys op [:inserts :attributes])])
-                         (dissoc :inserts :attributes))]
-                    (if (not-empty stack)
-                      (conj acc (reduce #(update % :children (fnil conj []) %2) stack))
-                      acc
-                      )))
-            ))))
+                          acc)
+                   ;; same depth
+                   :else
+                   (if (= (:name op)
+                          (:name (peek stack)))
+                     (recur (rest ops)
+                            (add-op-to-current op stack)
+                            acc)
+                     (recur (rest ops)
+                            (new-stack op)
+                            (unwind-stack acc stack)))))
+
+               ;; new block
+               (= (:name (first stack)) (:name op))
+               (do
+                 (println "not nested continue")
+                 (recur (rest ops)
+                        (add-op-to-current op stack)
+                        acc))
+               ;; not nested - continue
+               :else
+               (do
+                 (println "new block")
+                 (recur (rest ops)
+                        (new-stack op)
+                        (unwind-stack acc stack)))
+
+               ))))))
+
+
   )
