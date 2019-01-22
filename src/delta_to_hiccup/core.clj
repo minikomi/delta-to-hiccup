@@ -33,42 +33,44 @@
     :pred (fn [{:keys [attributes] :as op}]
             (= "ordered" (:list attributes)))
     :type :nested-block
-    :outer (fn ordered-list-outer-fn [attributes children]
-             (into [:ol] children))
+    :outer-tag :ol
     :inner-tag :li}
    {:name "Bullet list"
     :pred (fn [{:keys [attributes] :as op}]
             (= "bullet" (:list attributes)))
     :type :nested-block
-    :outer (fn bullet-list-outer-fn [attributes children]
-             (into [:ul] children))
+    :outer-tag :ul
     :inner-tag :li}
    {:name "Block Quote"
     :pred (fn [{:keys [attributes] :as op}]
             (:blockquote attributes))
     :type :block
-    :outer (fn block-quote-outer-fn [attributes children]
-             [:blockquote])}
+    :outer-tag :blockquote}
    {:name "Code Block"
     :pred (fn [{:keys [attributes] :as op}]
             (:code-block attributes))
     :type :block
-    :outer (fn code-block-outer-fn [attributes children]
-             (into [:pre] children))}
+    :outer-tag :pre}
    {:name "Header"
     :pred (fn [{:keys [attributes] :as op}]
             (#{1 2 3 4 5 6 7} (:header attributes)))
     :type :block
-    :outer (fn header-outer-fn [attributes children]
-             (let [header-tag (keyword (str "h" (:header attributes)))]
-               (into [header-tag] children)))}
+    :outer-tag (fn header-outer-fn [attributes]
+                 (keyword (str "h" (:header attributes))))}
    {:name "Default Paragrapgh"
     :pred (fn [children] true)
     :type :block
-    :outer (fn [attributes children]
-             (into [:p] children))}])
+    :outer-tag :p}])
 
 (def block-elements (atom default-block-elements))
+
+(defn determine-block-element [{:keys [inserts attributes newlines] :as op}]
+  (some #(when ((:pred %) op)
+           (assoc %
+                  :inserts inserts
+                  :newlines newlines
+                  :attributes attributes))
+        @block-elements))
 
 (defn update-attr [insert attr new-attr]
   (let [[f base] (cond
@@ -132,16 +134,9 @@
     :wrap (fn [insert attributes]
             (update-attr insert
                          :class
-                         (str "ql-font-" (:font attributes))))}
-   ])
+                         (str "ql-font-" (:font attributes))))}])
 
-(defn determine-block-element [{:keys [inserts attributes newlines] :as op}]
-  (some #(when ((:pred %) op)
-           (assoc %
-                  :inserts inserts
-                  :newlines newlines
-                  :attributes attributes))
-        @block-elements))
+(def inline-elements (atom default-inline-elements))
 
 (defn normalize-ops [deltas]
   (->> deltas
@@ -150,13 +145,22 @@
        first
        (mapv determine-block-element)))
 
-(defn render-block [{:keys [outer attributes children inner-tag]}]
-  (outer attributes children))
+(defn render-block [{:keys [outer-tag attributes children inner-tag]}]
+  (let [outer (if (fn? outer-tag)
+                (outer-tag attributes)
+                outer-tag)]
+    (into [outer]
+          children)))
 
-(defn render-inner [{:keys [inner-tag inserts newlines attributes]}]
+(defn render-inline-elements [{:keys [insert attributes]}]
+  (let [fns (map :wrap (filter #((:pred %) attributes) @inline-elements))]
+    (reduce #(%2 % attributes) insert fns)))
+
+(defn render-inner [{:keys [inner-tag inserts raw-inserts newlines attributes]}]
   (cond-> (vector (or inner-tag :span))
     attributes (conj attributes)
-    (not-empty inserts) (conj inserts)
+    (not-empty inserts) (into (mapv render-inline-elements inserts))
+    raw-inserts (conj raw-inserts)
     newlines (into (take newlines (repeat [:br])))))
 
 (defn add-op-to-current [op stack]
@@ -176,7 +180,7 @@
                           (update op
                                   :children
                                   conj
-                                  (render-inner (assoc op :inserts prev)))))
+                                  (render-inner (assoc op :raw-inserts prev)))))
                        (render-block (first stack))
                        (rest rev))]
         (conj acc collapsed))))
@@ -262,10 +266,11 @@
       },
      {
       "insert" "b"
+      "attributes" {"bold" true}
       },
      {
       "attributes" {
-                    "indent" 1,
+                    "indent" 3,
                     "list" "ordered"
                     },
       "insert" "\n"
@@ -423,7 +428,7 @@
                     "bold" true
                     },
       "insert" "ttt uuu vvv"
-      },
+      }
      {
       "attributes" {
                     "align" "right"
