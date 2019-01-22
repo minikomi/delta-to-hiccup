@@ -63,6 +63,7 @@
     {
      "attributes" {
                    "list" "ordered"
+                   "indent" 2
                    },
      "insert" "\n"
      }
@@ -232,14 +233,14 @@
             (= "ordered" (:list attributes)))
     :type :nested-block
     :outer (fn ordered-list-outer-fn [attributes children]
-             [:ol])
+             (into [:ol] children))
     :inner-tag :li}
    {:name "Bullet list"
     :pred (fn [{:keys [attributes] :as op}]
             (= "bullet" (:list attributes)))
     :type :nested-block
     :outer (fn bullet-list-outer-fn [attributes children]
-             [:ul])
+             (into [:ul] children))
     :inner-tag :li}
    {:name "Block Quote"
     :pred (fn [{:keys [attributes] :as op}]
@@ -252,19 +253,19 @@
             (:code-block attributes))
     :type :block
     :outer (fn code-block-outer-fn [attributes children]
-             [:pre])}
+             (into [:pre] children))}
    {:name "Header"
     :pred (fn [{:keys [attributes] :as op}]
             (#{1 2 3 4 5 6 7} (:header attributes)))
     :type :block
     :outer (fn header-outer-fn [attributes children]
              (let [header-tag (keyword (str "h" (:header attributes)))]
-               [header-tag]))}
+               (into [header-tag] children)))}
    {:name "Default Paragrapgh"
     :pred (fn [children] true)
     :type :block
     :outer (fn [attributes children]
-             [:p])}])
+             (into [:p] children))}])
 
 (def block-elements (atom default-block-elements))
 
@@ -283,26 +284,14 @@
        first
        (mapv determine-block-element)))
 
-(defn render-inline [op]
-
- ["INLINE" op])
-
 (defn render-block [{:keys [outer attributes children inner-tag]}]
-  (into (outer attributes nil) children))
+  (outer attributes children))
 
-(comment
- [:p
-
-  [:span
-   ]])
-
-(defn render-inner [{:keys [inner-tag inserts newlines]}]
-  (vector (or inner-tag :span)
-          inserts
-          )
-
-  )
-
+(defn render-inner [{:keys [inner-tag inserts newlines attributes]}]
+  (cond-> (vector (or inner-tag :span))
+    attributes (conj attributes)
+    (not-empty inserts) (conj inserts)
+    newlines (into (take newlines (repeat [:br])))))
 
 (defn add-op-to-current [op stack]
   (let [current (peek stack)]
@@ -310,30 +299,21 @@
           (update current
                   :children
                   (fnil conj [])
-                  (render-inner op)
-                  ))))
-
-;; reverse stack
-;; create children first stack, wrap in block
-;; create children second stack, add prev into children
-
-
-(defn collapse [stack]
-  (let [rev (reverse stack)]
-    (reduce
-     (fn [prev op]
-       (conj (render-block op)
-             [(:inner op)
-              [:prev prev]]))
-     (render-block (first stack))
-     (rest rev))
-    ))
+                  (render-inner op)))))
 
 (defn unwind-stack [acc stack]
-  (clojure.pprint/pprint stack)
-  (if (not-empty stack)
-    (conj acc (collapse stack))
-    acc))
+  (if (empty? stack) acc
+    (let [rev (reverse stack)
+          collapsed (reduce
+                     (fn [prev op]
+                       (render-block
+                        (update op
+                                :children
+                                conj
+                                (render-inner (assoc op :inserts prev)))))
+                     (render-block (first stack))
+                     (rest rev))]
+      (conj acc collapsed))))
 
 (defn add-to-stack [stack op]
   (conj stack
@@ -341,58 +321,54 @@
        (assoc :children [(render-inner op)])
        (dissoc :inserts :attributes :newlines))))
 
+(defn to-hiccup [deltas]
+  (loop [ops (normalize-ops deltas)
+         stack []
+         acc []]
+    (if (empty? ops) (unwind-stack acc stack)
+        (let [op (first ops)]
+          (cond
+            (and (not-empty stack)
+                 (= :nested-block (:type (peek stack)))
+                 (= :nested-block (:type op)))
+            (let [depth (inc (get-in op [:attributes :indent] 0))
+                  current-depth (count stack)]
+              (cond
+                ;; deeper
+                (< current-depth depth)
+                (recur ops
+                       (add-to-stack stack op)
+                       acc)
+                ;; shallower
+                (> current-depth depth)
+                (let [st (pop (pop stack))
+                      o1 (peek stack)
+                      o2 (peek (pop stack))
+                      new-stack (conj st
+                                      (update o2 :children conj
+                                              [(:inner-tag op)
+                                               (render-block o1)]))]
+                  (recur ops new-stack acc))
+                ;; same depth, same type
+                (= (:name op) (:name (peek stack)))
+                (recur (rest ops)
+                       (add-op-to-current op stack)
+                       acc)
+                ;; same depth but doesn't match - start new
+                :else
+                (do
+                  (recur (rest ops)
+                         (add-to-stack [] op)
+                         (conj acc stack)))))
+            (= (:name (first stack)) (:name op))
+            (recur (rest ops)
+                   (add-op-to-current op stack)
+                   acc)
+            :else
+            (recur (rest ops)
+                   (add-to-stack [] op)
+                   (unwind-stack acc stack)))))))
+
 (comment
-  (let [n (normalize-ops list-test)]
-    (doall (loop [ops n
-                  stack []
-                  acc []]
-             (if (empty? ops) (unwind-stack acc stack)
-                 (let [op (first ops)
-                       children (:children op)]
-                   (cond
-                     (and (not-empty stack)
-                          (= :nested-block (:type (peek stack)))
-                          (= :nested-block (:type op)))
-                     (let [depth (inc (get-in op [:attributes :indent] 0))
-                           current-depth (count stack)]
-                       (cond
-                         ;; deeper
-                         (< current-depth depth)
-                         (recur ops
-                                (add-to-stack stack op)
-                                acc)
-                         ;; shallower
-                         (> current-depth depth)
-                         (recur ops
-                                (let [st (pop (pop stack))
-                                      o1 (peek stack)
-                                      o2 (peek (pop stack))]
-                                  (conj st
-                                        (update o2 :children conj
-                                                [(:inner-tag op)
-                                                 (render-block o1)])))
-                                acc)
-                         ;; same depth
-                         (= (:name op) (:name (peek stack)))
-                         (recur (rest ops)
-                                (add-op-to-current op stack)
-                                acc)
-                         :else
-                         (do
-                           (println "new list")
-                           (recur (rest ops)
-                                  (add-to-stack [] op)
-                                  (conj acc stack)))))
-                     (= (:name (first stack)) (:name op))
-                     (recur (rest ops)
-                            (add-op-to-current op stack)
-                            acc)
-                     :else
-                     (recur (rest ops)
-                            (add-to-stack [] op)
-                            (unwind-stack acc stack))
-
-                     ))))))
-
-
-  )
+  (to-hiccup list-test)
+    )
