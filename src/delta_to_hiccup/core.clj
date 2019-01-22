@@ -1,205 +1,6 @@
 (ns delta-to-hiccup.core
   (:require [clojure.string :as str]))
 
-(def list-test
-  ( clojure.walk/keywordize-keys
-   [
-    {
-     "attributes" {
-                   "bold" true
-                   },
-     "insert" "first lonely paragrapth"
-     },
-    {
-     "attributes" {
-                   "align" "right"
-                   },
-     "insert" "\n"
-     }
-    {
-     "insert" "a"
-     },
-    {
-     "attributes" {
-                   "list" "ordered"
-                   },
-     "insert" "\n"
-     },
-    {
-     "insert" "b"
-     },
-    {
-     "attributes" {
-                   "indent" 1,
-                   "list" "ordered"
-                   },
-     "insert" "\n"
-     },
-    {
-     "insert" "c"
-     },
-    {
-     "attributes" {
-                   "indent" 1,
-                   "align" "right",
-                   "direction" "rtl",
-                   "list" "ordered"
-                   },
-     "insert" "\n"
-     },
-    {
-     "insert" "d"
-     },
-    {
-     "attributes" {
-                   "indent" 1,
-                   "list" "ordered"
-                   },
-     "insert" "\n"
-     },
-    {
-     "insert" "e"
-     },
-    {
-     "attributes" {
-                   "list" "ordered"
-                   "indent" 2
-                   },
-     "insert" "\n"
-     }
-
-
-    {
-     "insert" "Hello how are you?"
-     },
-    {
-     "attributes" {
-                   "align" "center"
-                   },
-     "insert" "\n"
-     },
-    {
-     "insert" "I'm feeling pretty good about myself."
-     },
-    {
-     "attributes" {
-                   "align" "center"
-                   },
-     "insert" "\n\n"
-     },
-    {
-     "insert" "AAA bbb ccc\nddd eee fff\nhjhh ii jjj\nkkk lll mmm \nnnnn "
-     },
-    {
-     "attributes" {
-                   "bold" true
-                   },
-     "insert" "ooo ppp"
-     },
-    {
-     "insert" "\n"
-     },
-    {
-     "attributes" {
-                   "bold" true
-                   },
-     "insert" "qqq rrr sss"
-     },
-    {
-     "insert" "\n"
-     },
-    {
-     "attributes" {
-                   "bold" true
-                   },
-     "insert" "ttt uuu vvv"
-     },
-    {
-     "insert" "\n\n\n"
-     },
-    {
-     "attributes" {
-                   "bold" true
-                   },
-     "insert" "AAA bbb ccc"
-     },
-    {
-     "attributes" {
-                   "align" "right"
-                   },
-     "insert" "\n"
-     },
-    {
-     "insert" "ddd eee fff"
-     },
-    {
-     "attributes" {
-                   "align" "right"
-                   },
-     "insert" "\n"
-     },
-    {
-     "insert" "hjhh ii jjj"
-     },
-    {
-     "attributes" {
-                   "align" "right"
-                   },
-     "insert" "\n"
-     },
-    {
-     "insert" "kkk lll mmm "
-     },
-    {
-     "attributes" {
-                   "align" "right"
-                   },
-     "insert" "\n"
-     },
-    {
-     "insert" "nnnn "
-     },
-    {
-     "attributes" {
-                   "bold" true
-                   },
-     "insert" "ooo ppp"
-     },
-    {
-     "attributes" {
-                   "align" "right"
-                   },
-     "insert" "\n"
-     },
-    {
-     "attributes" {
-                   "bold" true
-                   },
-     "insert" "qqq rrr sss"
-     },
-    {
-     "attributes" {
-                   "align" "right"
-                   },
-     "insert" "\n"
-     },
-    {
-     "attributes" {
-                   "bold" true
-                   },
-     "insert" "ttt uuu vvv"
-     },
-    {
-     "attributes" {
-                   "align" "right"
-                   },
-     "insert" "\n"
-     }
-
-
-    ]
-   ))
-
 (defn delta-has-internal-linebreak? [{:keys [insert]}]
   (re-find #"[^\n]\n|\n[^\n]" insert))
 
@@ -269,6 +70,71 @@
 
 (def block-elements (atom default-block-elements))
 
+(defn update-attr [insert attr new-attr]
+  (let [[f base] (cond
+                     (vector? new-attr) [conj []]
+                     (map? new-attr) [merge {}]
+                     (string? new-attr) [str ""])]
+    (cond
+      (string? insert)
+      [:span {attr (f base new-attr)} insert]
+      (map? (get insert 1))
+      (update-in insert [1 attr] (fnil f base) new-attr)
+      :else
+      (into
+       [(first insert)
+        {attr (f base new-attr)}]
+       (subvec insert 1)))))
+
+(def default-inline-elements
+  [{:pred :underline
+    :wrap (fn [insert attributes]
+            [:u insert])}
+   {:pred :strike
+    :wrap (fn [insert attributes]
+            [:s insert])}
+   {:pred :italic
+    :wrap (fn [insert attributes]
+            [:em insert])}
+   {:pred :bold
+    :wrap (fn [insert attributes]
+            [:strong insert])}
+   {:pred (fn [{:keys [script]}]
+            (= script "sub"))
+    :wrap (fn [insert attributes]
+            [:sup insert])}
+   {:pred (fn [{:keys [script]}]
+            (= script "super"))
+    :wrap (fn [insert attributes]
+            [:sub insert])}
+   {:pred :link
+    :wrap (fn [insert attributes]
+            [:a {:href (:link attributes)}
+             insert])}
+   {:pred :color
+    :wrap (fn [insert attributes]
+            (update-attr insert
+                         :style
+                         {:color (:color attributes)}))}
+   {:pred :background
+    :wrap (fn [insert attributes]
+            (update-attr insert
+                         :style
+                         {:background-color (:background attributes)}))}
+   {:pred (fn [{:keys [size]}]
+            (and size (not= size "normal")))
+    :wrap (fn [insert attributes]
+            (update-attr insert
+                         :class
+                         (str "ql-size-" (:size attributes))))}
+   {:pred (fn [{:keys [font]}]
+            (and font (not= font "normal")))
+    :wrap (fn [insert attributes]
+            (update-attr insert
+                         :class
+                         (str "ql-font-" (:font attributes))))}
+   ])
+
 (defn determine-block-element [{:keys [inserts attributes newlines] :as op}]
   (some #(when ((:pred %) op)
            (assoc %
@@ -303,23 +169,23 @@
 
 (defn unwind-stack [acc stack]
   (if (empty? stack) acc
-    (let [rev (reverse stack)
-          collapsed (reduce
-                     (fn [prev op]
-                       (render-block
-                        (update op
-                                :children
-                                conj
-                                (render-inner (assoc op :inserts prev)))))
-                     (render-block (first stack))
-                     (rest rev))]
-      (conj acc collapsed))))
+      (let [rev (reverse stack)
+            collapsed (reduce
+                       (fn [prev op]
+                         (render-block
+                          (update op
+                                  :children
+                                  conj
+                                  (render-inner (assoc op :inserts prev)))))
+                       (render-block (first stack))
+                       (rest rev))]
+        (conj acc collapsed))))
 
 (defn add-to-stack [stack op]
   (conj stack
-   (-> op
-       (assoc :children [(render-inner op)])
-       (dissoc :inserts :attributes :newlines))))
+        (-> op
+            (assoc :children [(render-inner op)])
+            (dissoc :inserts :attributes :newlines))))
 
 (defn to-hiccup [deltas]
   (loop [ops (normalize-ops deltas)
@@ -370,5 +236,228 @@
                    (unwind-stack acc stack)))))))
 
 (comment
-  (to-hiccup list-test)
-    )
+  (to-hiccup
+   (clojure.walk/keywordize-keys
+    [
+     {
+      "attributes" {
+                    "bold" true
+                    },
+      "insert" "first lonely paragrapth"
+      },
+     {
+      "attributes" {
+                    "align" "right"
+                    },
+      "insert" "\n"
+      }
+     {
+      "insert" "a"
+      },
+     {
+      "attributes" {
+                    "list" "ordered"
+                    },
+      "insert" "\n"
+      },
+     {
+      "insert" "b"
+      },
+     {
+      "attributes" {
+                    "indent" 1,
+                    "list" "ordered"
+                    },
+      "insert" "\n"
+      },
+     {
+      "insert" "c"
+      },
+     {
+      "attributes" {
+                    "indent" 1,
+                    "align" "right",
+                    "direction" "rtl",
+                    "list" "ordered"
+                    },
+      "insert" "\n"
+      },
+     {
+      "insert" "d"
+      },
+     {
+      "attributes" {
+                    "indent" 1,
+                    "list" "ordered"
+                    },
+      "insert" "\n"
+      },
+     {
+      "insert" "e"
+      },
+     {
+      "attributes" {
+                    "list" "ordered"
+                    "indent" 2
+                    },
+      "insert" "\n"
+      }
+
+
+     {
+      "insert" "Hello how are you?"
+      },
+     {
+      "attributes" {
+                    "align" "center"
+                    },
+      "insert" "\n"
+      },
+     {
+      "insert" "I'm feeling pretty good about myself."
+      },
+     {
+      "attributes" {
+                    "align" "center"
+                    },
+      "insert" "\n\n"
+      },
+     {
+      "insert" "AAA bbb ccc\nddd eee fff\nhjhh ii jjj\nkkk lll mmm \nnnnn "
+      },
+     {
+      "attributes" {
+                    "bold" true
+                    },
+      "insert" "ooo ppp"
+      },
+     {
+      "insert" "\n"
+      },
+     {
+      "attributes" {
+                    "bold" true
+                    },
+      "insert" "qqq rrr sss"
+      },
+     {
+      "insert" "\n"
+      },
+     {
+      "attributes" {
+                    "bold" true
+                    },
+      "insert" "ttt uuu vvv"
+      },
+     {
+      "insert" "\n\n\n"
+      },
+     {
+      "attributes" {
+                    "bold" true
+                    },
+      "insert" "AAA bbb ccc"
+      },
+     {
+      "attributes" {
+                    "align" "right"
+                    },
+      "insert" "\n"
+      },
+     {
+      "insert" "ddd eee fff"
+      },
+     {
+      "attributes" {
+                    "align" "right"
+                    },
+      "insert" "\n"
+      },
+     {
+      "insert" "hjhh ii jjj"
+      },
+     {
+      "attributes" {
+                    "align" "right"
+                    },
+      "insert" "\n"
+      },
+     {
+      "insert" "kkk lll mmm "
+      },
+     {
+      "attributes" {
+                    "align" "right"
+                    },
+      "insert" "\n"
+      },
+     {
+      "insert" "nnnn "
+      },
+     {
+      "attributes" {
+                    "bold" true
+                    },
+      "insert" "ooo ppp"
+      },
+     {
+      "attributes" {
+                    "align" "right"
+                    },
+      "insert" "\n"
+      },
+     {
+      "attributes" {
+                    "bold" true
+                    },
+      "insert" "qqq rrr sss"
+      },
+     {
+      "attributes" {
+                    "align" "right"
+                    },
+      "insert" "\n"
+      },
+     {
+      "attributes" {
+                    "bold" true
+                    },
+      "insert" "ttt uuu vvv"
+      },
+     {
+      "attributes" {
+                    "align" "right"
+                    },
+      "insert" "\n"
+      }
+
+     {
+      "attributes" {
+                    "underline" true,
+                    "strike" true,
+                    "italic" true,
+                    "bold" true,
+                    "color" "#e60000",
+                    "background" "#008a00",
+                    "size" "small",
+                    "font" "monospace",
+                    "link" "google.com"
+                    },
+      "insert" "bbbzz"
+      },
+     {
+      "insert" "\t"
+      },
+     {
+      "attributes" {
+                    "align" "center",
+                    "direction" "rtl",
+                    "list" "bullet"
+                    },
+      "insert" "\n"
+      }
+
+     ]
+    ))
+
+  )
