@@ -19,6 +19,29 @@
         {attr (f base new-attr)}]
        (subvec insert 1)))))
 
+(def default-embeds
+  [{:pred :image
+    :convert (fn [{:keys [image]}]
+               [:image {:src image}])}
+   {:pred :video
+    :convert (fn [{:keys [video]}]
+               [:iframe {:class "ql-video",
+                         :frameborder "0",
+                         :allowfullscreen "true",
+                         :src video}])}])
+
+(def embeds (atom default-embeds))
+
+(defn convert-embed [insert]
+  (println "convert:" insert)
+  (if (string? insert) insert
+      (if-let [convert-fn
+               (some #(when ((:pred %) insert)
+                        (:convert %))
+                     @embeds)]
+        (convert-fn insert)
+        "")))
+
 (def default-inline-elements
   [{:pred :underline
     :wrap (fn [insert attributes]
@@ -105,7 +128,7 @@
 
 (def block-elements (atom default-block-elements))
 
-(def default-block-attrs
+(def default-tag-attrs
   [{:pred (fn [{:keys [align]}]
             (#{"center" "right" "justify"} align))
     :wrap (fn [tag attributes]
@@ -119,25 +142,25 @@
                          :class
                          (str "ql-direction-" (:direction attributes))))}])
 
-(def block-attributes (atom default-block-attrs))
+(def tag-attributes (atom default-tag-attrs))
 
-(defn render-block-tag [tag attributes]
-  (let [fns (map :wrap (filter #((:pred %) attributes) @block-attributes))]
+(defn render-tag [tag attributes]
+  (let [fns (map :wrap (filter #((:pred %) attributes) @tag-attributes))]
     (reduce #(%2 % attributes) [tag] fns)))
 
 ;; rendering inline elements
 
 (defn render-inline-elements [{:keys [insert attributes]}]
   (let [fns (map :wrap (filter #((:pred %) attributes) @inline-elements))]
-    (reduce #(%2 % attributes) insert fns)))
+    (reduce #(%2 % attributes) (convert-embed insert) fns)))
 
 (defn render-inner [{:keys [inner-tag inserts newlines attributes]}]
   (let [base-tag (or inner-tag :span)
         inserts (when inserts (into (mapv render-inline-elements inserts)))
         newlines (into (take newlines (repeat [:br])))]
-    (cond-> (render-block-tag base-tag attributes)
-      inserts (into , inserts)
-      newlines (into , newlines))))
+    (cond-> (render-tag base-tag attributes)
+      inserts (into inserts)
+      newlines (into newlines))))
 
 ;; processing raw deltas
 
@@ -151,12 +174,15 @@
   "If a delta has newlines within, split the delta into
   text-only parts and newline parts."
   [{:keys [insert attributes]}]
-  (->> insert
-       (partition-by #{\newline})
-       (map #(apply str %))
-       (mapv
-        (fn [part] {:insert part
-                    :attributes attributes}))))
+  (if (string? insert)
+   (->> insert
+        (partition-by #{\newline})
+        (map #(apply str %))
+        (mapv
+         (fn [part] {:insert part
+                     :attributes attributes})))
+   [{:insert insert
+     :attributes attributes}]))
 
 (defn line-grouper [[acc op-group] delta]
   "groups all deltas up until a newline, for processing
@@ -324,7 +350,20 @@
       "insert" "bbbzz"}
      {"insert" "\t"}
      {"attributes" {"align" "center", "direction" "rtl", "list" "bullet"},
-      "insert" "\n"}]
+      "insert" "\n"}
+     {
+      "insert" {
+                 "video" "https://www.twitch.tv/jakenbakelive/clip/AgitatedVastAsparagusMoreCowbell"
+                 }
+      },
+     {
+      "attributes" {
+                     "align" "justify",
+                     "list" "bullet"
+                     },
+      "insert" "\n"
+      },
+     ]
     )
    )
 
