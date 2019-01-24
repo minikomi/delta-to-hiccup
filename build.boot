@@ -10,15 +10,16 @@
                  [samestep/boot-refresh "0.1.0" :scope "test"]
                  [adzerk/bootlaces "0.1.13" :scope "test"]
                  ;; ---- test ---
-                 [org.clojure/test.check "0.9.0" :scope "test"]
-                 [metosin/bat-test "0.4.0"]
+                 [metosin/bat-test "0.4.2"
+                  :exclude #{org.clojure.tools.reader}]
+                 [org.clojure/tools.reader "1.3.2"]
+                 [org.clojure/tools.nrepl "0.2.12"]
                  ])
 
 (require
  '[samestep.boot-refresh :refer [refresh]]
  '[adzerk.bootlaces :refer [bootlaces! build-jar push-snapshot push-release]]
- '[metosin.bat-test :refer [bat-test]]
- )
+ '[metosin.bat-test :refer [bat-test]])
 
 (bootlaces! +version+)
 
@@ -35,13 +36,15 @@
 
 (deftask test-options []
   (merge-env! :source-paths #{"test"}
-              :resources #{"testdata"}))
+              :resources #{"testdata"})
+  identity)
 
 (deftask run-tests
   []
   (comp
    (test-options)
-   (bat-test)))
+   (bat-test)
+   ))
 
 (deftask cider "CIDER profile" []
   (alter-var-root #'clojure.main/repl-requires conj

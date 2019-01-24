@@ -1,9 +1,20 @@
 (ns delta-to-hiccup.core
   (:require [clojure.string :as str]))
 
-;; default elements
+;; Helper function
 
-(defn update-attr [insert attr new-attr]
+(defn update-attr
+  "Takes a hiccup like tag and adds to the attributes
+   depending on the type of the new attribute
+     - If the attribute is a vector, will conj new attr
+     - If map, will merge
+     - If string, will join with a space in the middle
+
+    The insert can be a bare string, in which case it will
+    be wrapped in a :span. Otherwise, it will try to add to
+    the attributes map in the 1-th position, or will create it.
+  "
+  [insert attr new-attr]
   (let [[f base] (cond
                    (vector? new-attr) [conj []]
                    (map? new-attr) [merge {}]
@@ -18,6 +29,8 @@
        [(first insert)
         {attr (f base new-attr)}]
        (subvec insert 1)))))
+
+;; defaults
 
 (def default-embeds
   [{:pred :image
@@ -144,6 +157,8 @@
 
 (def tag-attributes (atom default-tag-attrs))
 
+;; rendering inner-tag attributes
+
 (defn render-tag [tag attributes]
   (let [fns (map :wrap (filter #((:pred %) attributes) @tag-attributes))]
     (reduce #(%2 % attributes) [tag] fns)))
@@ -161,6 +176,14 @@
     (cond-> (render-tag base-tag attributes)
       inserts (into inserts)
       newlines (into newlines))))
+
+;; render block elements
+
+(defn render-block [{:keys [outer-tag attributes children]}]
+  (let [outer (if (fn? outer-tag)
+                (outer-tag attributes)
+                outer-tag)]
+    (into [outer] children)))
 
 ;; processing raw deltas
 
@@ -208,14 +231,6 @@
        (reduce line-grouper [[] nil])
        first
        (mapv determine-block-element)))
-
-;; render block elements
-
-(defn render-block [{:keys [outer-tag attributes children]}]
-  (let [outer (if (fn? outer-tag)
-                (outer-tag attributes)
-                outer-tag)]
-    (into [outer] children)))
 
 ;; stack / loop fns
 
@@ -277,7 +292,10 @@
                        acc)
                 ;; same depth but doesn't match - start new
                 :else
-                stack))
+                (recur ops
+                       (add-block-to-stack [] op)
+                       (unwind-stack acc stack))
+                ))
             (= (:name (first stack)) (:name op))
             (recur (rest ops)
                    (add-child op stack)
@@ -286,85 +304,3 @@
             (recur ops
                    (add-block-to-stack [] op)
                    (unwind-stack acc stack)))))))
-
-(comment
-
-
-
-  
-  (to-hiccup
-
-   
-   (clojure.walk/keywordize-keys
-
-    [{"attributes" {"bold" true}, "insert" "first lonely paragrapth"}
-     {"attributes" {"align" "right"}, "insert" "\n"}
-     {"insert" "1 indent 0"}
-     {"attributes" {"list" "ordered"}, "insert" "\n"}
-     {"insert" "2 indent 3", "attributes" {"bold" true}}
-     {"attributes" {"indent" 3, "list" "ordered"}, "insert" "\n"}
-     {"insert" "3 indent 1"}
-     {"attributes"
-      {"indent" 1, "align" "right", "direction" "rtl", "list" "ordered"},
-      "insert" "\n"}
-     {"insert" "4 indent 1 2"}
-     {"attributes" {"indent" 1, "list" "ordered"}, "insert" "\n"}
-     {"insert" "5 indent 2"}
-     {"attributes" {"list" "ordered", "indent" 2}, "insert" "\n"}
-     {"insert" "Hello how are you?"}
-     {"attributes" {"align" "center"}, "insert" "\n"}
-     {"insert" "I'm feeling pretty good about myself."}
-     {"attributes" {"align" "center"}, "insert" "\n\n"}
-     {"insert" "AAA bbb ccc\nddd eee fff\nhjhh ii jjj\nkkk lll mmm \nnnnn "}
-     {"attributes" {"bold" true}, "insert" "ooo ppp"}
-     {"insert" "\n"}
-     {"attributes" {"bold" true}, "insert" "qqq rrr sss"}
-     {"insert" "\n"}
-     {"attributes" {"bold" true}, "insert" "ttt uuu vvv"}
-     {"insert" "\n\n\n"}
-     {"attributes" {"bold" true}, "insert" "AAA bbb ccc"}
-     {"attributes" {"align" "right"}, "insert" "\n"}
-     {"insert" "ddd eee fff"}
-     {"attributes" {"align" "right"}, "insert" "\n"}
-     {"insert" "hjhh ii jjj"}
-     {"attributes" {"align" "right"}, "insert" "\n"}
-     {"insert" "kkk lll mmm "}
-     {"attributes" {"align" "right"}, "insert" "\n"}
-     {"insert" "nnnn "}
-     {"attributes" {"bold" true}, "insert" "ooo ppp"}
-     {"attributes" {"align" "right"}, "insert" "\n"}
-     {"attributes" {"bold" true}, "insert" "qqq rrr sss"}
-     {"attributes" {"align" "right"}, "insert" "\n"}
-     {"attributes" {"bold" true}, "insert" "ttt uuu vvv"}
-     {"attributes" {"align" "right"}, "insert" "\n"}
-     {"attributes"
-      {"strike" true,
-       "font" "monospace",
-       "link" "google.com",
-       "italic" true,
-       "size" "small",
-       "background" "#008a00",
-       "bold" true,
-       "color" "#e60000",
-       "underline" true},
-      "insert" "bbbzz"}
-     {"insert" "\t"}
-     {"attributes" {"align" "center", "direction" "rtl", "list" "bullet"},
-      "insert" "\n"}
-     {
-      "insert" {
-                 "video" "https://www.twitch.tv/jakenbakelive/clip/AgitatedVastAsparagusMoreCowbell"
-                 }
-      },
-     {
-      "attributes" {
-                     "align" "justify",
-                     "list" "bullet"
-                     },
-      "insert" "\n"
-      },
-     ]
-    )
-   )
-
-  )
