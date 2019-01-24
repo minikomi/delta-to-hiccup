@@ -16,7 +16,7 @@
   "
   [insert attr new-attr]
   (let [[f base] (cond
-                   (vector? new-attr) [conj []]
+                   (vector? new-attr) [into []]
                    (map? new-attr) [merge {}]
                    (string? new-attr) [#(str % " " %2) ""])]
     (cond
@@ -35,7 +35,7 @@
 (def default-embeds
   [{:pred :image
     :convert (fn [{:keys [image]}]
-               [:image {:src image}])}
+               [:img {:src image}])}
    {:pred :video
     :convert (fn [{:keys [video]}]
                [:iframe {:class "ql-video",
@@ -46,14 +46,14 @@
 (def embeds (atom default-embeds))
 
 (defn convert-embed [insert]
-  (println "convert:" insert)
-  (if (string? insert) insert
-      (if-let [convert-fn
-               (some #(when ((:pred %) insert)
-                        (:convert %))
-                     @embeds)]
-        (convert-fn insert)
-        "")))
+  (if (string? insert)
+    insert
+    (if-let [convert-fn
+             (some #(when ((:pred %) insert)
+                      (:convert %))
+                   @embeds)]
+      (convert-fn insert)
+      "")))
 
 (def default-inline-elements
   [{:pred :underline
@@ -71,11 +71,11 @@
    {:pred (fn [{:keys [script]}]
             (= script "sub"))
     :wrap (fn [insert attributes]
-            [:sup insert])}
+            [:sub insert])}
    {:pred (fn [{:keys [script]}]
             (= script "super"))
     :wrap (fn [insert attributes]
-            [:sub insert])}
+            [:sup insert])}
    {:pred :link
     :wrap (fn [insert attributes]
             [:a {:href (:link attributes)}
