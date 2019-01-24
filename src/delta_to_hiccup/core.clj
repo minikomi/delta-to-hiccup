@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]))
 
 ;; Helper function
+;; ---------------------------
 
 (defn update-attr
   "Takes a hiccup like tag and adds to the attributes
@@ -31,6 +32,9 @@
        (subvec insert 1)))))
 
 ;; defaults
+;; ---------------------------
+
+;; embeds
 
 (def default-embeds
   [{:pred :image
@@ -54,6 +58,8 @@
                    @embeds)]
       (convert-fn insert)
       "")))
+
+;; inline
 
 (def default-inline-elements
   [{:pred :underline
@@ -105,6 +111,8 @@
 
 (def inline-elements (atom default-inline-elements))
 
+;; block
+
 (def default-block-elements
   [{:name "Ordered List"
     :pred (fn [{:keys [attributes] :as op}]
@@ -140,6 +148,8 @@
     :outer-tag :p}])
 
 (def block-elements (atom default-block-elements))
+
+;; inner tag attributes
 
 (def default-tag-attrs
   [{:pred (fn [{:keys [align]}]
@@ -198,14 +208,14 @@
   text-only parts and newline parts."
   [{:keys [insert attributes]}]
   (if (string? insert)
-   (->> insert
-        (partition-by #{\newline})
-        (map #(apply str %))
-        (mapv
-         (fn [part] {:insert part
-                     :attributes attributes})))
-   [{:insert insert
-     :attributes attributes}]))
+    (->> insert
+         (partition-by #{\newline})
+         (map #(apply str %))
+         (mapv
+          (fn [part] {:insert part
+                      :attributes attributes})))
+    [{:insert insert
+      :attributes attributes}]))
 
 (defn line-grouper [[acc op-group] delta]
   "groups all deltas up until a newline, for processing
@@ -254,10 +264,10 @@
 
 (defn unwind-stack [acc stack]
   (if (empty? stack) acc
-    (loop [stack stack]
-      (if (= (count stack) 1)
-        (conj acc (render-block (first stack)))
-        (recur (collapse-once stack))))))
+      (loop [stack stack]
+        (if (= (count stack) 1)
+          (conj acc (render-block (first stack)))
+          (recur (collapse-once stack))))))
 
 (defn add-block-to-stack [stack op]
   (conj stack (dissoc op :inserts :attributes :children)))
@@ -268,7 +278,7 @@
          acc []]
     (if (empty? ops) (into [:div] (unwind-stack acc stack))
         (let [op (first ops)]
-           (cond
+          (cond
             (and (not-empty stack)
                  (= :nested-block (:type (peek stack)))
                  (= :nested-block (:type op)))
@@ -294,8 +304,7 @@
                 :else
                 (recur ops
                        (add-block-to-stack [] op)
-                       (unwind-stack acc stack))
-                ))
+                       (unwind-stack acc stack))))
             (= (:name (first stack)) (:name op))
             (recur (rest ops)
                    (add-child op stack)
