@@ -9,8 +9,7 @@
       (to-hiccup
        [{:insert "hi"}
         {:insert "\n"}])
-      [:div [:p [:span "hi" [:br]]]]
-      ))
+      [:div [:p [:span "hi" [:br]]]]))
     (testing "bold -> strong"
       (is
        (=
@@ -132,14 +131,13 @@
           {:attributes {:underline true}, :insert "fff"}
           {:insert "\n"}])
         [:div
-           [:p
-            [:span "aa" [:em "a"] [:br]]
-            [:span [:em "b"] [:strong [:em "bb"]] [:br]]
-            [:span [:strong [:em "ccc"]] [:br]]
-            [:span [:strong [:em "d"]] [:em "d"] [:em [:u "d"]] [:br]]
-            [:span [:em [:u "e"]] [:u "ee"] [:br]]
-            [:span [:u "fff"] [:br]]]])))
-    ))
+         [:p
+          [:span "aa" [:em "a"] [:br]]
+          [:span [:em "b"] [:strong [:em "bb"]] [:br]]
+          [:span [:strong [:em "ccc"]] [:br]]
+          [:span [:strong [:em "d"]] [:em "d"] [:em [:u "d"]] [:br]]
+          [:span [:em [:u "e"]] [:u "ee"] [:br]]
+          [:span [:u "fff"] [:br]]]])))))
 
 (deftest test-inserts
   (testing "image insert"
@@ -164,5 +162,4 @@
          [:br]]]]
       (to-hiccup
        [{:insert {:video "test"}}
-        {:insert "\n"}]))))
-  )
+        {:insert "\n"}])))))
