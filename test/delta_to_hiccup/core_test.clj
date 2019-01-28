@@ -163,3 +163,130 @@
       (to-hiccup
        [{:insert {:video "test"}}
         {:insert "\n"}])))))
+
+(deftest test-lists
+  (testing "Simple list"
+    (is
+     (=
+      [:div
+       [:ol
+        [:li "list 1" [:br]]
+        [:li "list 2" [:br]]]]
+      (to-hiccup
+       [{:insert "list 1"}
+        {:insert "\n" :attributes {:list "ordered"}}
+        {:insert "list 2"}
+        {:insert "\n" :attributes {:list "ordered"}}])))
+    (is
+     (=
+      [:div
+       [:ul
+        [:li "list 1" [:br]]
+        [:li "list 2" [:br]]]]
+      (to-hiccup
+       [{:insert "list 1"}
+        {:insert "\n" :attributes {:list "bullet"}}
+        {:insert "list 2"}
+        {:insert "\n" :attributes {:list "bullet"}}]))))
+
+  (testing "list broken up by paragraph"
+    (is
+     (=
+      [:div
+       [:ol [:li "list 1" [:br]]]
+       [:p [:span "paragraph" [:br]]]
+       [:ol [:li "list 2" [:br]]]]
+      (to-hiccup
+       [{:insert "list 1"}
+        {:insert "\n" :attributes {:list "ordered"}}
+        {:insert "paragraph"}
+        {:insert "\n"}
+        {:insert "list 2"}
+        {:insert "\n" :attributes {:list "ordered"}}]))))
+  (testing "list broken up by other type of list"
+    (is
+     (=
+      [:div
+       [:ol [:li "list 1" [:br]]]
+       [:ul [:li "list 2" [:br]]]]
+      (to-hiccup
+       [{:insert "list 1"}
+        {:insert "\n" :attributes {:list "ordered"}}
+        {:insert "list 2"}
+        {:insert "\n" :attributes {:list "bullet"}}]))))
+  (testing "indents"
+    (is
+     (=
+      [:div
+       [:ol [:li "list 1" [:br]]
+        [:li [:ol [:li "list 1 indented" [:br]]]]]]
+      (to-hiccup
+       [{:insert "list 1"}
+        {:insert "\n" :attributes {:list "ordered"}}
+        {:insert "list 1 indented"}
+        {:insert "\n" :attributes {:list "ordered" :indent 1}}]))))
+  (testing "simple indent same type list"
+    (is
+     (=
+      [:div
+       [:ol [:li "list 1" [:br]]
+        [:li [:ol [:li "list 1 indented" [:br]]]]]]
+      (to-hiccup
+       [{:insert "list 1"}
+        {:insert "\n" :attributes {:list "ordered"}}
+        {:insert "list 1 indented"}
+        {:insert "\n" :attributes {:list "ordered" :indent 1}}])))
+    (is
+     (=
+      [:div
+       [:ol [:li "list 1" [:br]]
+        [:li [:ol [:li [:ol [:li [:ol [:li "list 1 indented" [:br]]]]]]]]]]
+      (to-hiccup
+       [{:insert "list 1"}
+        {:insert "\n" :attributes {:list "ordered"}}
+        {:insert "list 1 indented"}
+        {:insert "\n" :attributes {:list "ordered" :indent 3}}]))))
+  (testing "indent -> dedent"
+    (is
+     (=
+      [:div
+       [:ol [:li "list 1" [:br]]
+        [:li
+         [:ol
+          [:li
+           [:ol
+            [:li
+             [:ol
+              [:li "list 1 indented 3" [:br]]]]
+            [:li "list 1 dedented 2" [:br]]]]
+          [:li "list 1 dedented 1" [:br]]]]]]
+      (to-hiccup
+       [{:insert "list 1"}
+        {:insert "\n" :attributes {:list "ordered"}}
+        {:insert "list 1 indented 3"}
+        {:insert "\n" :attributes {:list "ordered" :indent 3}}
+        {:insert "list 1 dedented 2"}
+        {:insert "\n" :attributes {:list "ordered" :indent 2}}
+        {:insert "list 1 dedented 1"}
+        {:insert "\n" :attributes {:list "ordered" :indent 1}}]))))
+  (testing "dedent to same level with different list starts new list"
+    (is
+     (=
+      [:div
+       [:ol [:li "list 1" [:br]]
+        [:li
+         [:ol
+          [:li
+           [:ol
+            [:li
+             [:ol
+              [:li "list 1 indented 3" [:br]]]]]]]]]
+       [:ul
+        [:li [:ul [:li [:ul [:li "list 1 dedented 2" [:br]]]]]]]]
+      (to-hiccup
+       [{:insert "list 1"}
+        {:insert "\n" :attributes {:list "ordered"}}
+        {:insert "list 1 indented 3"}
+        {:insert "\n" :attributes {:list "ordered" :indent 3}}
+        {:insert "list 1 dedented 2"}
+        {:insert "\n" :attributes {:list "bullet" :indent 2}}])))))
