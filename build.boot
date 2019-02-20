@@ -26,8 +26,6 @@
 (bootlaces! +version+)
 
 (task-options!
- push {:ensure-branch nil
-       :repo-map      {:checksum :warn}}
  pom  {:project     +project+
        :version     +version+
        :description "opinionated quill delta -> hiccup conversion"
