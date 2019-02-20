@@ -260,6 +260,7 @@
           (update o2 :children
                   (fnil conj [])
                   [(:inner-tag o2)
+                   {:class "nested"}
                    (render-block o1)]))))
 
 (defn unwind-stack [acc stack]

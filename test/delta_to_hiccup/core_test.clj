@@ -218,8 +218,10 @@
     (is
      (=
       [:div
-       [:ol [:li "list 1" [:br]]
-        [:li [:ol [:li "list 1 indented" [:br]]]]]]
+       [:ol
+        [:li "list 1" [:br]]
+        [:li {:class "nested"}
+         [:ol [:li "list 1 indented" [:br]]]]]]
       (to-hiccup
        [{:insert "list 1"}
         {:insert "\n" :attributes {:list "ordered"}}
@@ -230,7 +232,8 @@
      (=
       [:div
        [:ol [:li "list 1" [:br]]
-        [:li [:ol [:li "list 1 indented" [:br]]]]]]
+        [:li {:class "nested"}
+         [:ol [:li "list 1 indented" [:br]]]]]]
       (to-hiccup
        [{:insert "list 1"}
         {:insert "\n" :attributes {:list "ordered"}}
@@ -240,7 +243,10 @@
      (=
       [:div
        [:ol [:li "list 1" [:br]]
-        [:li [:ol [:li [:ol [:li [:ol [:li "list 1 indented" [:br]]]]]]]]]]
+        [:li {:class "nested"}
+         [:ol [:li {:class "nested"}
+               [:ol [:li {:class "nested"}
+                     [:ol [:li "list 1 indented" [:br]]]]]]]]]]
       (to-hiccup
        [{:insert "list 1"}
         {:insert "\n" :attributes {:list "ordered"}}
@@ -251,11 +257,11 @@
      (=
       [:div
        [:ol [:li "list 1" [:br]]
-        [:li
+        [:li {:class "nested"}
          [:ol
-          [:li
+          [:li {:class "nested"}
            [:ol
-            [:li
+            [:li {:class "nested"}
              [:ol
               [:li "list 1 indented 3" [:br]]]]
             [:li "list 1 dedented 2" [:br]]]]
@@ -274,15 +280,15 @@
      (=
       [:div
        [:ol [:li "list 1" [:br]]
-        [:li
+        [:li {:class "nested"}
          [:ol
-          [:li
+          [:li {:class "nested"}
            [:ol
-            [:li
+            [:li {:class "nested"}
              [:ol
               [:li "list 1 indented 3" [:br]]]]]]]]]
        [:ul
-        [:li [:ul [:li [:ul [:li "list 1 dedented 2" [:br]]]]]]]]
+        [:li {:class "nested"} [:ul [:li {:class "nested"} [:ul [:li "list 1 dedented 2" [:br]]]]]]]]
       (to-hiccup
        [{:insert "list 1"}
         {:insert "\n" :attributes {:list "ordered"}}
