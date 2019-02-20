@@ -1,9 +1,8 @@
-(def +project+ 'co.poyo/lazy-load)
+(def +project+ 'co.poyo/delta-to-hiccup)
 (def +version+ "0.1.0-SNAPSHOT")
 
 (set-env!
  :source-paths #{"src"}
- :resources #{"resources"}
  :dependencies '[;; ---- clj ----
                  [org.clojure/clojure "RELEASE"]
                  ;; ---- dev ----
@@ -11,9 +10,12 @@
                  [adzerk/bootlaces "0.1.13" :scope "test"]
                  ;; ---- test ---
                  [metosin/bat-test "0.4.2"
-                  :exclude #{org.clojure.tools.reader}]
-                 [org.clojure/tools.reader "1.3.2"]
-                 [org.clojure/tools.nrepl "0.2.12"]
+                  :exclude #{org.clojure.tools.reader}
+                  :scope "test"]
+                 [org.clojure/tools.reader "1.3.2"
+                  :scope "test"]
+                 [org.clojure/tools.nrepl "0.2.12"
+                  :scope "test"]
                  ])
 
 (require
@@ -28,9 +30,9 @@
        :repo-map      {:checksum :warn}}
  pom  {:project     +project+
        :version     +version+
-       :description ""
-       :url         ""
-       :scm         {:url ""}
+       :description "opinionated quill delta -> hiccup conversion"
+       :url         "https://github.com/minikomi/delta-to-hiccup"
+       :scm         {:url "https://github.com/minikomi/delta-to-hiccup"}
        :license     {"Eclipse Public License"
                      "http://www.eclipse.org/legal/epl-v10.html"}})
 
